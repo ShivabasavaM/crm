@@ -56,8 +56,14 @@ export const api = {
   updateDeal: (id, data) => request(`/deals/${id}`, { method: "PATCH", body: data }),
   deleteDeal: (id) => request(`/deals/${id}`, { method: "DELETE" }),
 
-  followUp: (deal_id) => request("/ai/follow-up", { method: "POST", body: { deal_id } }),
+  followUp: (deal_id, instructions = "") =>
+    request("/ai/follow-up", { method: "POST", body: { deal_id, instructions } }),
   listDrafts: () => request("/ai/drafts"),
+
+  dashboard: () => request("/dashboard"),
+  listActivities: (dealId) => request(`/deals/${dealId}/activities`),
+  addActivity: (dealId, data) =>
+    request(`/deals/${dealId}/activities`, { method: "POST", body: data }),
 
   // Billing (Razorpay)
   checkout: () => request("/billing/checkout", { method: "POST" }),

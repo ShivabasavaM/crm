@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: str = ""  # only needed for the deployed webhook
     PRO_PRICE_INR: int = 499  # rupees; charged once to unlock Pro in this demo
 
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "http://localhost:5174"
 
     # Free-tier gates (Pro = unlimited)
     FREE_CONTACT_LIMIT: int = 10

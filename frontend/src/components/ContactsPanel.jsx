@@ -10,6 +10,7 @@ export default function ContactsPanel({ contacts, onCreate, onUpdate, onDelete, 
   const [error, setError] = useState("");
   const [capReached, setCapReached] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -42,8 +43,7 @@ export default function ContactsPanel({ contacts, onCreate, onUpdate, onDelete, 
 
   function validate() {
     if (!form.name.trim()) return "Name is required.";
-    if (!form.email.trim() && !form.phone.trim())
-      return "Add an email or a phone number.";
+    if (!form.email.trim() && !form.phone.trim()) return "Add an email or a phone number.";
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
       return "That email address doesn't look right.";
     return "";
@@ -79,17 +79,36 @@ export default function ContactsPanel({ contacts, onCreate, onUpdate, onDelete, 
     if (window.confirm(`Delete ${c.name}? This can't be undone.`)) onDelete(c.id);
   }
 
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? contacts.filter((c) =>
+        [c.name, c.company, c.email, c.phone]
+          .filter(Boolean)
+          .some((f) => f.toLowerCase().includes(q))
+      )
+    : contacts;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <h2 className="font-display text-lg font-semibold">
-          Contacts{" "}
-          <span className="ml-1 text-sm font-normal text-slate-400">{contacts.length}</span>
+          Contacts <span className="ml-1 text-sm font-normal text-slate-400">{contacts.length}</span>
         </h2>
         <button onClick={() => (open ? close() : startAdd())} className={btnGhost + " text-sm"}>
           {open ? "Close" : "+ Add contact"}
         </button>
       </div>
+
+      {contacts.length > 0 && (
+        <div className="border-b border-slate-100 px-5 py-3">
+          <input
+            className={input}
+            placeholder="Search contacts by name, company, email…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
 
       {open && (
         <form onSubmit={submit} className="space-y-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
@@ -130,7 +149,10 @@ export default function ContactsPanel({ contacts, onCreate, onUpdate, onDelete, 
             No contacts yet. Add the first person you're selling to.
           </li>
         )}
-        {contacts.map((c) => (
+        {contacts.length > 0 && filtered.length === 0 && (
+          <li className="px-5 py-6 text-center text-sm text-slate-400">No contacts match “{query}”.</li>
+        )}
+        {filtered.map((c) => (
           <li key={c.id} className="flex items-start justify-between px-5 py-3">
             <div>
               <div className="font-medium">{c.name}</div>

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, date
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -10,11 +10,12 @@ import razorpay
 
 from config import settings, PIPELINE_STAGES
 from database import init_db, get_session, engine
-from models import User, Contact, Deal, AiDraft
+from models import User, Contact, Deal, Activity, AiDraft
 from auth import hash_password, verify_password, create_token, get_current_user
 from ai import generate_follow_up
 
 rzp = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+CLOSED_STAGES = ("Won", "Lost")
 
 
 @asynccontextmanager
@@ -63,6 +64,10 @@ class DealIn(BaseModel):
     value: float = 0.0
     stage: str = "Lead"
     notes: str | None = ""
+    priority: str | None = "Medium"
+    expected_close_date: date | None = None
+    next_action: str | None = None
+    next_action_date: date | None = None
 
 
 class DealUpdate(BaseModel):
@@ -71,10 +76,21 @@ class DealUpdate(BaseModel):
     value: float | None = None
     stage: str | None = None
     notes: str | None = None
+    priority: str | None = None
+    expected_close_date: date | None = None
+    next_action: str | None = None
+    next_action_date: date | None = None
 
 
 class FollowUpIn(BaseModel):
     deal_id: int
+    instructions: str | None = None
+
+
+class ActivityIn(BaseModel):
+    type: str = "note"
+    note: str = ""
+    occurred_at: datetime | None = None
 
 
 class VerifyIn(BaseModel):
@@ -214,6 +230,8 @@ def create_deal(
     if body.stage not in PIPELINE_STAGES:
         raise HTTPException(400, f"Stage must be one of {PIPELINE_STAGES}")
     deal = Deal(user_id=user.id, **body.model_dump())
+    if deal.stage in CLOSED_STAGES:
+        deal.closed_at = datetime.utcnow()
     session.add(deal)
     session.commit()
     session.refresh(deal)
@@ -230,12 +248,32 @@ def update_deal(
     deal = session.get(Deal, deal_id)
     if not deal or deal.user_id != user.id:
         raise HTTPException(404, "Not found")
+
     data = body.model_dump(exclude_unset=True)
     if "stage" in data and data["stage"] not in PIPELINE_STAGES:
         raise HTTPException(400, f"Stage must be one of {PIPELINE_STAGES}")
+
+    old_stage = deal.stage
     for k, v in data.items():
         setattr(deal, k, v)
     deal.updated_at = datetime.utcnow()
+
+    # Stage transition: log it and manage closed_at.
+    if "stage" in data and data["stage"] != old_stage:
+        new_stage = data["stage"]
+        if new_stage in CLOSED_STAGES:
+            deal.closed_at = datetime.utcnow()
+        else:
+            deal.closed_at = None
+        session.add(
+            Activity(
+                user_id=user.id,
+                deal_id=deal.id,
+                type="stage_change",
+                note=f"{old_stage} \u2192 {new_stage}",
+            )
+        )
+
     session.add(deal)
     session.commit()
     session.refresh(deal)
@@ -251,9 +289,148 @@ def delete_deal(
     deal = session.get(Deal, deal_id)
     if not deal or deal.user_id != user.id:
         raise HTTPException(404, "Not found")
+    # remove this deal's activities too
+    for a in session.exec(select(Activity).where(Activity.deal_id == deal.id)).all():
+        session.delete(a)
     session.delete(deal)
     session.commit()
     return {"ok": True}
+
+
+# ---------------- Activities (deal timeline) ----------------
+@app.get("/deals/{deal_id}/activities")
+def list_activities(
+    deal_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    deal = session.get(Deal, deal_id)
+    if not deal or deal.user_id != user.id:
+        raise HTTPException(404, "Deal not found")
+    return session.exec(
+        select(Activity)
+        .where(Activity.deal_id == deal_id)
+        .order_by(Activity.occurred_at.desc())
+    ).all()
+
+
+@app.post("/deals/{deal_id}/activities")
+def add_activity(
+    deal_id: int,
+    body: ActivityIn,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    deal = session.get(Deal, deal_id)
+    if not deal or deal.user_id != user.id:
+        raise HTTPException(404, "Deal not found")
+    act = Activity(
+        user_id=user.id,
+        deal_id=deal_id,
+        type=body.type or "note",
+        note=body.note or "",
+        occurred_at=body.occurred_at or datetime.utcnow(),
+    )
+    session.add(act)
+    session.commit()
+    session.refresh(act)
+    return act
+
+
+# ---------------- Dashboard analytics ----------------
+@app.get("/dashboard")
+def dashboard(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    deals = session.exec(select(Deal).where(Deal.user_id == user.id)).all()
+    today = date.today()
+
+    won = [d for d in deals if d.stage == "Won"]
+    lost = [d for d in deals if d.stage == "Lost"]
+    open_deals = [d for d in deals if d.stage not in CLOSED_STAGES]
+
+    closed = len(won) + len(lost)
+    win_rate = round(len(won) / closed, 3) if closed else None
+
+    won_value_total = sum(d.value or 0 for d in won)
+    won_this_month = sum(
+        (d.value or 0)
+        for d in won
+        if d.closed_at and d.closed_at.year == today.year and d.closed_at.month == today.month
+    )
+    open_value = sum(d.value or 0 for d in open_deals)
+    avg_deal_size = round(won_value_total / len(won), 2) if won else 0
+
+    funnel = [
+        {
+            "stage": s,
+            "count": len([d for d in deals if d.stage == s]),
+            "value": sum(d.value or 0 for d in deals if d.stage == s),
+        }
+        for s in PIPELINE_STAGES
+    ]
+
+    closing_this_month = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "value": d.value,
+            "expected_close_date": d.expected_close_date.isoformat()
+            if d.expected_close_date
+            else None,
+        }
+        for d in open_deals
+        if d.expected_close_date
+        and d.expected_close_date.year == today.year
+        and d.expected_close_date.month == today.month
+    ]
+
+    overdue_actions = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "next_action": d.next_action,
+            "next_action_date": d.next_action_date.isoformat()
+            if d.next_action_date
+            else None,
+        }
+        for d in open_deals
+        if d.next_action_date and d.next_action_date < today
+    ]
+
+    recent = session.exec(
+        select(Activity)
+        .where(Activity.user_id == user.id)
+        .order_by(Activity.occurred_at.desc())
+    ).all()[:8]
+    recent_activities = [
+        {
+            "id": a.id,
+            "deal_id": a.deal_id,
+            "type": a.type,
+            "note": a.note,
+            "occurred_at": a.occurred_at.isoformat(),
+        }
+        for a in recent
+    ]
+
+    return {
+        "win_rate": win_rate,
+        "counts": {
+            "won": len(won),
+            "lost": len(lost),
+            "open": len(open_deals),
+            "total": len(deals),
+        },
+        "open_pipeline_value": open_value,
+        "won_value_total": won_value_total,
+        "won_value_this_month": won_this_month,
+        "avg_deal_size": avg_deal_size,
+        "funnel": funnel,
+        "closing_this_month": closing_this_month,
+        "overdue_actions": overdue_actions,
+        "recent_activities": recent_activities,
+    }
 
 
 # ---------------- AI feature (gated) ----------------
@@ -290,7 +467,7 @@ def ai_follow_up(
         f"Contact notes: {contact.notes if contact else 'none'}"
     )
 
-    result = generate_follow_up(context)
+    result = generate_follow_up(context, body.instructions or "")
     draft = AiDraft(
         user_id=user.id,
         deal_id=deal.id,
@@ -317,7 +494,7 @@ def list_drafts(
 # ---------------- Billing (Razorpay) ----------------
 @app.post("/billing/checkout")
 def create_checkout(user: User = Depends(get_current_user)):
-    amount = settings.PRO_PRICE_INR * 100  # Razorpay uses paise
+    amount = settings.PRO_PRICE_INR * 100
     order = rzp.order.create(
         {
             "amount": amount,
@@ -370,7 +547,7 @@ def downgrade(
 
 @app.post("/webhooks/razorpay")
 async def razorpay_webhook(request: Request):
-    payload = await request.body()  # RAW body required for signature check
+    payload = await request.body()
     sig = request.headers.get("X-Razorpay-Signature", "")
     try:
         rzp.utility.verify_webhook_signature(

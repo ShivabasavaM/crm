@@ -30,6 +30,9 @@ export default function Navbar() {
               <Link to="/app" className="rounded-lg px-3 py-2 hover:bg-slate-100">
                 Pipeline
               </Link>
+              <Link to="/insights" className="rounded-lg px-3 py-2 hover:bg-slate-100">
+                Insights
+              </Link>
               <Link to="/account" className="rounded-lg px-3 py-2 hover:bg-slate-100">
                 Account
               </Link>

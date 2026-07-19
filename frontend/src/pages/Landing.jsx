@@ -107,8 +107,8 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="mx-auto max-w-6xl px-5 py-10 text-sm text-slate-400">
-        SoloCRM — a hackathon build. Payments run in Stripe test mode.
+      <footer className="mx-auto max-w-6xl border-t border-slate-200 px-5 py-10 text-sm text-slate-400">
+        © 2026 SoloCRM · The CRM for one-person sales teams.
       </footer>
     </div>
   );

@@ -6,6 +6,7 @@ import ContactsPanel from "../components/ContactsPanel";
 import PipelineBoard from "../components/PipelineBoard";
 import AiPanel from "../components/AiPanel";
 import UpgradeModal from "../components/UpgradeModal";
+import DealDrawer from "../components/DealDrawer";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { openRazorpayCheckout } from "../lib/razorpay";
@@ -21,6 +22,7 @@ export default function Dashboard() {
     params.get("upgraded") ? "You're on Pro now — everything's unlocked." : ""
   );
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [openDeal, setOpenDeal] = useState(null);
 
   const reload = useCallback(async () => {
     const [a, c, d, dr] = await Promise.all([
@@ -38,6 +40,15 @@ export default function Dashboard() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Keep the open drawer pointed at the freshest copy of its deal.
+  useEffect(() => {
+    if (openDeal) {
+      const latest = deals.find((d) => d.id === openDeal.id);
+      if (latest && latest !== openDeal) setOpenDeal(latest);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deals]);
 
   // Coming back from a successful checkout redirect (kept for safety).
   useEffect(() => {
@@ -112,6 +123,14 @@ export default function Dashboard() {
     <div>
       <Navbar />
       <UpgradeModal open={showUpgrade} onUpgrade={upgrade} onClose={() => setShowUpgrade(false)} />
+      {openDeal && (
+        <DealDrawer
+          deal={openDeal}
+          contacts={contacts}
+          onClose={() => setOpenDeal(null)}
+          onUpdate={updateDeal}
+        />
+      )}
 
       <main className="mx-auto max-w-6xl space-y-5 px-5 py-8">
         {banner && (
@@ -131,6 +150,7 @@ export default function Dashboard() {
           onCreate={createDeal}
           onUpdate={updateDeal}
           onDelete={deleteDeal}
+          onOpen={setOpenDeal}
         />
 
         <div className="grid gap-5 lg:grid-cols-2">

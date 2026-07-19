@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
@@ -32,8 +32,24 @@ class Deal(SQLModel, table=True):
     value: float = 0.0
     stage: str = "Lead"  # one of config.PIPELINE_STAGES
     notes: str = ""
+    # P1 additions
+    priority: str = "Medium"  # Low | Medium | High
+    expected_close_date: Optional[date] = None
+    next_action: Optional[str] = None
+    next_action_date: Optional[date] = None
+    closed_at: Optional[datetime] = None  # set when moved to Won/Lost
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Activity(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    deal_id: int = Field(index=True, foreign_key="deal.id")
+    type: str = "note"  # note | call | email | meeting | stage_change
+    note: str = ""
+    occurred_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class AiDraft(SQLModel, table=True):

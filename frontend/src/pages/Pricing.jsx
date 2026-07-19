@@ -145,10 +145,6 @@ export default function Pricing() {
           ))}
         </div>
 
-        <p className="mt-8 text-center text-xs text-slate-400">
-          Test mode — use card 4111 1111 1111 1111, any future date, any CVC (or UPI id
-          success@razorpay).
-        </p>
       </div>
     </div>
   );

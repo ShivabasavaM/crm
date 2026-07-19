@@ -17,11 +17,17 @@ Deal context:
 {context}
 """
 
+EXTRA = "\n\nAdditional instructions from the user — follow these closely when writing the email:\n{instructions}"
 
-def generate_follow_up(context: str) -> dict:
+
+def generate_follow_up(context: str, instructions: str = "") -> dict:
+    prompt = PROMPT.format(context=context)
+    if instructions and instructions.strip():
+        prompt += EXTRA.format(instructions=instructions.strip())
+
     response = client.models.generate_content(
         model=settings.AI_MODEL,
-        contents=PROMPT.format(context=context),
+        contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json"),
     )
     text = (response.text or "").strip()
