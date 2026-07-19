@@ -3,6 +3,7 @@
 **A full-stack, AI-powered CRM for one-person sales teams.** A stranger can land on the page, sign up, use a real product, hit a paywall, pay with a card/netbanking, and get upgraded automatically — no human in the loop.
 
 🔗 **Live app:** https://thesolocrm.vercel.app
+
 🎥 **Demo video:** https://drive.google.com/drive/folders/1tD91GK1zCzYgtd5GWgjnimsPfPhhLpw5?usp=sharing
 
 > Payments run in **Razorpay test mode** — no real money moves. To test the upgrade, use the checkout's **Netbanking → any bank → Success** flow (details below).
