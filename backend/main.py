@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 import razorpay
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     init_db()
     yield
 
+app = FastAPI(title="SoloCRM API", lifespan=lifespan) 
 
 app.add_middleware(
     CORSMiddleware,
