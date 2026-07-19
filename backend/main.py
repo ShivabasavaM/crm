@@ -2,7 +2,7 @@ import json
 from datetime import datetime, date
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
@@ -24,15 +24,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="SoloCRM API", lifespan=lifespan)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+",
+    allow_origins=[settings.FRONTEND_URL.rstrip("/")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -571,6 +566,6 @@ async def razorpay_webhook(request: Request):
     return {"received": True}
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"status": "ok", "service": "SoloCRM API"}
